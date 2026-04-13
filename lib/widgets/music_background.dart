@@ -75,14 +75,19 @@ class _MusicPattern extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notes = <_NoteData>[
-      _NoteData(Icons.music_note_rounded, 40, 0.08, const Offset(20, 90)),
-      _NoteData(Icons.music_note_rounded, 82, 0.10, const Offset(230, 140)),
-      _NoteData(Icons.music_note_rounded, 56, 0.06, const Offset(110, 260)),
-      _NoteData(Icons.music_note_rounded, 110, 0.07, const Offset(310, 200)),
-      _NoteData(Icons.music_note_rounded, 90, 0.05, const Offset(260, 520)),
-      _NoteData(Icons.music_note_rounded, 70, 0.05, const Offset(80, 720)),
-      _NoteData(Icons.music_note_rounded, 100, 0.06, const Offset(180, 950)),
-      _NoteData(Icons.music_note_rounded, 60, 0.05, const Offset(320, 1080)),
+      _NoteData.icon(Icons.music_note_rounded, 40, 0.08, Offset(20, 90)),
+      _NoteData.glyph('♫', 90, 0.10, Offset(230, 140)),
+      _NoteData.glyph('♬', 70, 0.08, Offset(110, 260)),
+      _NoteData.glyph('𝄞', 130, 0.09, Offset(300, 200)),
+      _NoteData.glyph('♭', 70, 0.07, Offset(40, 430)),
+      _NoteData.glyph('♯', 78, 0.08, Offset(260, 410)),
+      _NoteData.glyph('♪', 60, 0.07, Offset(150, 560)),
+      _NoteData.glyph('♮', 72, 0.07, Offset(310, 600)),
+      _NoteData.glyph('𝄢', 120, 0.08, Offset(30, 700)),
+      _NoteData.glyph('♫', 84, 0.07, Offset(220, 800)),
+      _NoteData.glyph('𝄡', 96, 0.07, Offset(120, 920)),
+      _NoteData.glyph('♬', 66, 0.06, Offset(300, 1010)),
+      _NoteData.icon(Icons.music_note_rounded, 60, 0.05, Offset(60, 1080)),
     ];
     return IgnorePointer(
       child: Stack(
@@ -90,11 +95,20 @@ class _MusicPattern extends StatelessWidget {
           return Positioned(
             left: n.offset.dx,
             top: n.offset.dy,
-            child: Icon(
-              n.icon,
-              size: n.size,
-              color: Colors.white.withValues(alpha: n.opacity),
-            ),
+            child: n.icon != null
+                ? Icon(
+                    n.icon,
+                    size: n.size,
+                    color: Colors.white.withValues(alpha: n.opacity),
+                  )
+                : Text(
+                    n.glyph!,
+                    style: TextStyle(
+                      fontSize: n.size,
+                      height: 1.0,
+                      color: Colors.white.withValues(alpha: n.opacity),
+                    ),
+                  ),
           );
         }).toList(),
       ),
@@ -103,9 +117,16 @@ class _MusicPattern extends StatelessWidget {
 }
 
 class _NoteData {
-  final IconData icon;
+  final IconData? icon;
+  final String? glyph;
   final double size;
   final double opacity;
   final Offset offset;
-  const _NoteData(this.icon, this.size, this.opacity, this.offset);
+
+  const _NoteData.icon(
+      IconData this.icon, this.size, this.opacity, this.offset)
+      : glyph = null;
+  const _NoteData.glyph(
+      String this.glyph, this.size, this.opacity, this.offset)
+      : icon = null;
 }

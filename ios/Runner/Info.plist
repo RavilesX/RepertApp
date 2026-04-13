@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Permite tomar fotos de partituras/letras para asociarlas a una canción.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Permite elegir imágenes de la galería para asociarlas a una canción.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

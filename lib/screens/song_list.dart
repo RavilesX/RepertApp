@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/song.dart';
+import '../services/backup_service.dart';
+import '../services/image_service.dart';
 import '../services/sound_service.dart';
 import '../storage/song_storage.dart';
 import '../theme/app_colors.dart';
 import '../widgets/music_background.dart';
+import 'image_viewer.dart';
 import 'song_form.dart';
 
 enum SortColumn { artist, title, key }
@@ -97,6 +100,16 @@ class _SongListScreenState extends State<SongListScreen> {
     }
   }
 
+  Future<void> _openImage(Song s) async {
+    SoundService.instance.button();
+    if (s.imagePath == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ImageViewerScreen(imagePath: s.imagePath!),
+      ),
+    );
+  }
+
   Future<void> _deleteSong(Song s) async {
     SoundService.instance.button();
     final ok = await showDialog<bool>(
@@ -116,9 +129,72 @@ class _SongListScreenState extends State<SongListScreen> {
       ),
     );
     if (ok == true) {
+      await ImageService.instance.deleteIfExists(s.imagePath);
+      await ImageService.instance.deleteIfExists(s.thumbPath);
       setState(() => _songs.removeWhere((x) => x.id == s.id));
       await _persist();
     }
+  }
+
+  Future<void> _exportBackup() async {
+    SoundService.instance.button();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final zip = await BackupService.instance.exportToZip(_songs);
+      await BackupService.instance.shareZip(zip);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error al exportar: $e')),
+      );
+    }
+  }
+
+  Future<void> _importBackup() async {
+    SoundService.instance.button();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await BackupService.instance.importFromPicker(
+        existing: _songs,
+        storage: _storage,
+      );
+      if (result == null) return;
+      await _load();
+      SoundService.instance.ok();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Importadas ${result.imported} canciones'
+            '${result.replaced > 0 ? " (${result.replaced} reemplazadas)" : ""}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error al importar: $e')),
+      );
+    }
+  }
+
+  Future<void> _showBackupMenu(Offset globalPos) async {
+    SoundService.instance.button();
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final selected = await showMenu<String>(
+      context: context,
+      color: AppColors.bgMid,
+      position: RelativeRect.fromLTRB(
+        globalPos.dx,
+        globalPos.dy,
+        overlay.size.width - globalPos.dx,
+        overlay.size.height - globalPos.dy,
+      ),
+      items: const [
+        PopupMenuItem(value: 'export', child: Text('Exportar repertorio')),
+        PopupMenuItem(value: 'import', child: Text('Importar repertorio')),
+      ],
+    );
+    if (selected == 'export') await _exportBackup();
+    if (selected == 'import') await _importBackup();
   }
 
   Future<void> _showRowMenu(Song s, Offset globalPos) async {
@@ -179,7 +255,10 @@ class _SongListScreenState extends State<SongListScreen> {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 children: [
-                  _Header(onSortTap: _openSortSheet),
+                  _Header(
+                    onSortTap: _openSortSheet,
+                    onMenuTap: _showBackupMenu,
+                  ),
                   const SizedBox(height: 24),
                   Expanded(
                     child: _loading
@@ -207,9 +286,10 @@ class _SongListScreenState extends State<SongListScreen> {
                                     artist: _titleCase(s.artist),
                                     keyLabel: s.keyLabel,
                                     capoLabel: _capoLabel(s.capo),
+                                    hasImage: s.imagePath != null,
                                     glowColor: AppColors.iconGlowPalette[
                                         index % AppColors.iconGlowPalette.length],
-                                    onTap: () => SoundService.instance.button(),
+                                    onTap: () => _openImage(s),
                                     onLongPress: (globalPos) =>
                                         _showRowMenu(s, globalPos),
                                   );
@@ -228,7 +308,8 @@ class _SongListScreenState extends State<SongListScreen> {
 
 class _Header extends StatelessWidget {
   final VoidCallback onSortTap;
-  const _Header({required this.onSortTap});
+  final ValueChanged<Offset> onMenuTap;
+  const _Header({required this.onSortTap, required this.onMenuTap});
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +357,31 @@ class _Header extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(width: 10),
+        Builder(builder: (ctx) {
+          return GestureDetector(
+            onTapDown: (d) => onMenuTap(d.globalPosition),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.cardBorder),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0x1AFFFFFF),
+                    Color(0x10FFFFFF),
+                  ],
+                ),
+              ),
+              child: const Icon(
+                Icons.more_vert_rounded,
+                color: AppColors.textPrimary,
+                size: 22,
+              ),
+            ),
+          );
+        }),
       ],
     );
   }
@@ -286,6 +392,7 @@ class _SongCard extends StatefulWidget {
   final String artist;
   final String keyLabel;
   final String capoLabel;
+  final bool hasImage;
   final Color glowColor;
   final VoidCallback onTap;
   final ValueChanged<Offset> onLongPress;
@@ -295,6 +402,7 @@ class _SongCard extends StatefulWidget {
     required this.artist,
     required this.keyLabel,
     required this.capoLabel,
+    required this.hasImage,
     required this.glowColor,
     required this.onTap,
     required this.onLongPress,
@@ -351,7 +459,9 @@ class _SongCardState extends State<_SongCard>
             borderRadius: BorderRadius.circular(28),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-              child: Container(
+              child: Stack(
+                children: [
+                  Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(28),
@@ -448,6 +558,27 @@ class _SongCardState extends State<_SongCard>
                     ),
                   ],
                 ),
+              ),
+                  if (widget.hasImage)
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.35),
+                          border: Border.all(
+                              color: AppColors.cardBorder),
+                        ),
+                        child: const Icon(
+                          Icons.image_rounded,
+                          size: 16,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
