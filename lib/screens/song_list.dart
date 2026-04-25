@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/song.dart';
 import '../services/backup_service.dart';
@@ -14,6 +15,8 @@ import 'image_viewer.dart';
 import 'song_form.dart';
 
 enum SortColumn { artist, title, key }
+
+enum ViewMode { card, compact, list }
 
 class SongListScreen extends StatefulWidget {
   const SongListScreen({super.key});
@@ -28,6 +31,9 @@ class _SongListScreenState extends State<SongListScreen> {
   SortColumn _sortBy = SortColumn.title;
   bool _asc = true;
   bool _loading = true;
+  ViewMode _viewMode = ViewMode.card;
+
+  static const _kViewModeKey = 'view_mode';
 
   @override
   void initState() {
@@ -36,14 +42,28 @@ class _SongListScreenState extends State<SongListScreen> {
   }
 
   Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
     final songs = await _storage.loadAll();
+    final modeIndex = prefs.getInt(_kViewModeKey) ?? 0;
     setState(() {
       _songs = songs;
       _loading = false;
+      _viewMode = ViewMode.values[modeIndex.clamp(0, ViewMode.values.length - 1)];
     });
   }
 
   Future<void> _persist() async => _storage.saveAll(_songs);
+
+  Future<void> _saveViewMode(ViewMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kViewModeKey, mode.index);
+  }
+
+  void _cycleViewMode() {
+    final next = ViewMode.values[(_viewMode.index + 1) % ViewMode.values.length];
+    setState(() => _viewMode = next);
+    _saveViewMode(next);
+  }
 
   String _sortKeyFor(Song s, SortColumn col) {
     switch (col) {
@@ -240,9 +260,21 @@ class _SongListScreenState extends State<SongListScreen> {
     );
   }
 
+  IconData _viewModeIcon(ViewMode mode) {
+    switch (mode) {
+      case ViewMode.card:
+        return Icons.view_agenda_outlined;
+      case ViewMode.compact:
+        return Icons.view_day_outlined;
+      case ViewMode.list:
+        return Icons.view_list_outlined;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sorted = _sorted;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     return Scaffold(
       extendBody: true,
       backgroundColor: Colors.black,
@@ -258,6 +290,9 @@ class _SongListScreenState extends State<SongListScreen> {
                   _Header(
                     onSortTap: _openSortSheet,
                     onMenuTap: _showBackupMenu,
+                    viewMode: _viewMode,
+                    viewModeIcon: _viewModeIcon(_viewMode),
+                    onViewModeTap: _cycleViewMode,
                   ),
                   const SizedBox(height: 24),
                   Expanded(
@@ -275,24 +310,60 @@ class _SongListScreenState extends State<SongListScreen> {
                                 ),
                               )
                             : ListView.separated(
-                                padding: const EdgeInsets.only(bottom: 96),
+                                padding: EdgeInsets.only(bottom: 96 + bottomInset),
                                 itemCount: sorted.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 18),
-                                itemBuilder: (context, index) {
-                                  final s = sorted[index];
-                                  return _SongCard(
-                                    title: _titleCase(s.title),
-                                    artist: _titleCase(s.artist),
-                                    keyLabel: s.keyLabel,
-                                    capoLabel: _capoLabel(s.capo),
-                                    hasImage: s.imagePath != null,
-                                    glowColor: AppColors.iconGlowPalette[
-                                        index % AppColors.iconGlowPalette.length],
-                                    onTap: () => _openImage(s),
-                                    onLongPress: (globalPos) =>
-                                        _showRowMenu(s, globalPos),
-                                  );
+                                separatorBuilder: (_, _) {
+                                  switch (_viewMode) {
+                                    case ViewMode.card:
+                                      return const SizedBox(height: 18);
+                                    case ViewMode.compact:
+                                      return const SizedBox(height: 10);
+                                    case ViewMode.list:
+                                      return const SizedBox.shrink();
+                                  }
+                                },
+                                itemBuilder: (ctx, i) {
+                                  final s = sorted[i];
+                                  final glow = AppColors.iconGlowPalette[
+                                      i % AppColors.iconGlowPalette.length];
+                                  switch (_viewMode) {
+                                    case ViewMode.card:
+                                      return _SongCard(
+                                        title: _titleCase(s.title),
+                                        artist: _titleCase(s.artist),
+                                        keyLabel: s.keyLabel,
+                                        capoLabel: _capoLabel(s.capo),
+                                        hasImage: s.imagePath != null,
+                                        glowColor: glow,
+                                        onTap: () => _openImage(s),
+                                        onLongPress: (pos) =>
+                                            _showRowMenu(s, pos),
+                                      );
+                                    case ViewMode.compact:
+                                      return _CompactSongCard(
+                                        title: _titleCase(s.title),
+                                        artist: _titleCase(s.artist),
+                                        keyLabel: s.keyLabel,
+                                        capoLabel: _capoLabel(s.capo),
+                                        hasImage: s.imagePath != null,
+                                        glowColor: glow,
+                                        onTap: () => _openImage(s),
+                                        onLongPress: (pos) =>
+                                            _showRowMenu(s, pos),
+                                      );
+                                    case ViewMode.list:
+                                      return _ListSongRow(
+                                        title: _titleCase(s.title),
+                                        artist: _titleCase(s.artist),
+                                        keyLabel: s.keyLabel,
+                                        capoLabel: _capoLabel(s.capo),
+                                        hasImage: s.imagePath != null,
+                                        glowColor: glow,
+                                        onTap: () => _openImage(s),
+                                        onLongPress: (pos) =>
+                                            _showRowMenu(s, pos),
+                                      );
+                                  }
                                 },
                               ),
                   ),
@@ -306,25 +377,67 @@ class _SongListScreenState extends State<SongListScreen> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Header
+// ---------------------------------------------------------------------------
+
 class _Header extends StatelessWidget {
   final VoidCallback onSortTap;
   final ValueChanged<Offset> onMenuTap;
-  const _Header({required this.onSortTap, required this.onMenuTap});
+  final ViewMode viewMode;
+  final IconData viewModeIcon;
+  final VoidCallback onViewModeTap;
+
+  const _Header({
+    required this.onSortTap,
+    required this.onMenuTap,
+    required this.viewMode,
+    required this.viewModeIcon,
+    required this.onViewModeTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          'RepertApp',
-          style: GoogleFonts.poppins(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-            letterSpacing: 0.2,
+        Flexible(
+          child: Text(
+            'RepertApp',
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: 0.2,
+            ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(width: 8),
+        // View-mode toggle button
+        GestureDetector(
+          onTap: onViewModeTap,
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.cardBorder),
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0x1AFFFFFF),
+                  Color(0x10FFFFFF),
+                ],
+              ),
+            ),
+            child: Icon(
+              viewModeIcon,
+              color: AppColors.textSecondary,
+              size: 20,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Sort button
         GestureDetector(
           onTap: onSortTap,
           child: Container(
@@ -358,6 +471,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
+        // Backup / more-vert button
         Builder(builder: (ctx) {
           return GestureDetector(
             onTapDown: (d) => onMenuTap(d.globalPosition),
@@ -386,6 +500,10 @@ class _Header extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Card view — original large card, unchanged
+// ---------------------------------------------------------------------------
 
 class _SongCard extends StatefulWidget {
   final String title;
@@ -462,103 +580,103 @@ class _SongCardState extends State<_SongCard>
               child: Stack(
                 children: [
                   Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                      color: AppColors.cardBorder, width: 1.2),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0x18FFFFFF),
-                      Color(0x10FFFFFF),
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.glowColor.withValues(alpha: 0.15),
-                      blurRadius: 24,
-                      spreadRadius: -8,
-                    ),
-                    const BoxShadow(
-                      color: Color(0x66000000),
-                      blurRadius: 24,
-                      offset: Offset(0, 14),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                widget.glowColor.withValues(alpha: 0.6),
-                            blurRadius: 28,
-                            spreadRadius: -4,
-                          ),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                          color: AppColors.cardBorder, width: 1.2),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0x18FFFFFF),
+                          Color(0x10FFFFFF),
                         ],
                       ),
-                      child: Icon(
-                        Icons.music_note_rounded,
-                        color: widget.glowColor,
-                        size: 42,
-                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.glowColor.withValues(alpha: 0.15),
+                          blurRadius: 24,
+                          spreadRadius: -8,
+                        ),
+                        const BoxShadow(
+                          color: Color(0x66000000),
+                          blurRadius: 24,
+                          offset: Offset(0, 14),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.title,
-                            style: GoogleFonts.poppins(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 22,
-                              height: 1.1,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            widget.artist,
-                            style: GoogleFonts.poppins(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w400,
-                              fontSize: 14,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 14),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              _Chip(
-                                label: widget.keyLabel,
-                                glowColor: widget.glowColor,
-                              ),
-                              _Chip(
-                                label: widget.capoLabel,
-                                glowColor: AppColors.neonPink,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 54,
+                          height: 54,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: widget.glowColor
+                                    .withValues(alpha: 0.6),
+                                blurRadius: 28,
+                                spreadRadius: -4,
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                          child: Icon(
+                            Icons.music_note_rounded,
+                            color: widget.glowColor,
+                            size: 42,
+                          ),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.title,
+                                style: GoogleFonts.poppins(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 22,
+                                  height: 1.1,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                widget.artist,
+                                style: GoogleFonts.poppins(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 14),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: [
+                                  _Chip(
+                                    label: widget.keyLabel,
+                                    glowColor: widget.glowColor,
+                                  ),
+                                  _Chip(
+                                    label: widget.capoLabel,
+                                    glowColor: AppColors.neonPink,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
                   if (widget.hasImage)
                     Positioned(
                       top: 12,
@@ -588,6 +706,371 @@ class _SongCardState extends State<_SongCard>
   }
 }
 
+// ---------------------------------------------------------------------------
+// Compact card view
+// ---------------------------------------------------------------------------
+
+class _CompactSongCard extends StatefulWidget {
+  final String title;
+  final String artist;
+  final String keyLabel;
+  final String capoLabel;
+  final bool hasImage;
+  final Color glowColor;
+  final VoidCallback onTap;
+  final ValueChanged<Offset> onLongPress;
+
+  const _CompactSongCard({
+    required this.title,
+    required this.artist,
+    required this.keyLabel,
+    required this.capoLabel,
+    required this.hasImage,
+    required this.glowColor,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  State<_CompactSongCard> createState() => _CompactSongCardState();
+}
+
+class _CompactSongCardState extends State<_CompactSongCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 120),
+    lowerBound: 0.0,
+    upperBound: 0.04,
+  );
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      gestures: {
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+          () => LongPressGestureRecognizer(
+            duration: const Duration(seconds: 1),
+          ),
+          (instance) {
+            instance.onLongPressStart =
+                (details) => widget.onLongPress(details.globalPosition);
+          },
+        ),
+      },
+      child: GestureDetector(
+        onTapDown: (_) => _ctrl.forward(),
+        onTapUp: (_) {
+          _ctrl.reverse();
+          widget.onTap();
+        },
+        onTapCancel: () => _ctrl.reverse(),
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, child) => Transform.scale(
+            scale: 1 - _ctrl.value,
+            child: child,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                          color: AppColors.cardBorder, width: 1.0),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0x16FFFFFF),
+                          Color(0x0DFFFFFF),
+                        ],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.glowColor.withValues(alpha: 0.12),
+                          blurRadius: 16,
+                          spreadRadius: -6,
+                        ),
+                        const BoxShadow(
+                          color: Color(0x55000000),
+                          blurRadius: 16,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Music note icon — 38×38, glow blur 18
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: widget.glowColor
+                                    .withValues(alpha: 0.55),
+                                blurRadius: 18,
+                                spreadRadius: -4,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.music_note_rounded,
+                            color: widget.glowColor,
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                widget.title,
+                                style: GoogleFonts.poppins(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                  height: 1.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              // Artist + key + capo inline
+                              Expanded(
+                                child: Text(
+                                  '${widget.artist}  ·  ${widget.keyLabel}  ·  ${widget.capoLabel}',
+                                  style: GoogleFonts.poppins(
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 12,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Image indicator — same position and size as card view
+                  if (widget.hasImage)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.35),
+                          border: Border.all(
+                              color: AppColors.cardBorder),
+                        ),
+                        child: const Icon(
+                          Icons.image_rounded,
+                          size: 14,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// List row view
+// ---------------------------------------------------------------------------
+
+class _ListSongRow extends StatefulWidget {
+  final String title;
+  final String artist;
+  final String keyLabel;
+  final String capoLabel;
+  final bool hasImage;
+  final Color glowColor;
+  final VoidCallback onTap;
+  final ValueChanged<Offset> onLongPress;
+
+  const _ListSongRow({
+    required this.title,
+    required this.artist,
+    required this.keyLabel,
+    required this.capoLabel,
+    required this.hasImage,
+    required this.glowColor,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  State<_ListSongRow> createState() => _ListSongRowState();
+}
+
+class _ListSongRowState extends State<_ListSongRow>
+    with SingleTickerProviderStateMixin {
+  // Subtler animation for the dense list — scale down only to 0.98
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 100),
+    lowerBound: 0.0,
+    upperBound: 0.02,
+  );
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitleText =
+        '${widget.artist}  ·  ${widget.keyLabel}  ·  ${widget.capoLabel}';
+
+    return RawGestureDetector(
+      gestures: {
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+          () => LongPressGestureRecognizer(
+            duration: const Duration(seconds: 1),
+          ),
+          (instance) {
+            instance.onLongPressStart =
+                (details) => widget.onLongPress(details.globalPosition);
+          },
+        ),
+      },
+      child: GestureDetector(
+        onTapDown: (_) => _ctrl.forward(),
+        onTapUp: (_) {
+          _ctrl.reverse();
+          widget.onTap();
+        },
+        onTapCancel: () => _ctrl.reverse(),
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, child) => Transform.scale(
+            scale: 1 - _ctrl.value,
+            child: child,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 56),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      // Leading — 32×32 music note circle with colored glow
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: widget.glowColor.withValues(alpha: 0.5),
+                              blurRadius: 10,
+                              spreadRadius: -3,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.music_note_rounded,
+                          color: widget.glowColor,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      // Title + subtitle stack
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              widget.title,
+                              style: GoogleFonts.poppins(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              subtitleText,
+                              style: GoogleFonts.poppins(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w400,
+                                fontSize: 12,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Trailing — image indicator
+                      if (widget.hasImage) ...[
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.image_rounded,
+                          size: 16,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              // Built-in divider — no separate separator needed
+              const Divider(
+                height: 1,
+                thickness: 1,
+                color: Color(0x22FFFFFF),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared chip widget
+// ---------------------------------------------------------------------------
+
 class _Chip extends StatelessWidget {
   final String label;
   final Color glowColor;
@@ -614,6 +1097,10 @@ class _Chip extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// FAB
+// ---------------------------------------------------------------------------
 
 class _AddButton extends StatelessWidget {
   final VoidCallback onTap;
@@ -654,6 +1141,10 @@ class _AddButton extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Sort bottom sheet
+// ---------------------------------------------------------------------------
+
 class _SortBottomSheet extends StatefulWidget {
   final SortColumn initialSortBy;
   final bool initialAsc;
@@ -687,13 +1178,14 @@ class _SortBottomSheetState extends State<_SortBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           margin: const EdgeInsets.only(top: 80),
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+          padding: EdgeInsets.fromLTRB(20, 14, 20, 32 + bottomPad),
           decoration: BoxDecoration(
             borderRadius:
                 const BorderRadius.vertical(top: Radius.circular(30)),
@@ -777,7 +1269,7 @@ class _SortBottomSheetState extends State<_SortBottomSheet> {
         text,
         style: GoogleFonts.poppins(
           color: AppColors.textPrimary,
-          fontSize: 20,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -814,7 +1306,7 @@ class _SortBottomSheetState extends State<_SortBottomSheet> {
                 color: selected
                     ? AppColors.textPrimary
                     : AppColors.textSecondary,
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
