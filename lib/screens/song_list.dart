@@ -1,5 +1,4 @@
 import 'dart:ui';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,11 +9,11 @@ import '../services/image_service.dart';
 import '../services/sound_service.dart';
 import '../storage/song_storage.dart';
 import '../theme/app_colors.dart';
+import '../utils/song_formatting.dart';
 import '../widgets/music_background.dart';
+import '../widgets/pressable_scale.dart';
 import 'image_viewer.dart';
 import 'song_form.dart';
-
-enum SortColumn { artist, title, key }
 
 enum ViewMode { card, compact, list }
 
@@ -48,7 +47,8 @@ class _SongListScreenState extends State<SongListScreen> {
     setState(() {
       _songs = songs;
       _loading = false;
-      _viewMode = ViewMode.values[modeIndex.clamp(0, ViewMode.values.length - 1)];
+      _viewMode =
+          ViewMode.values[modeIndex.clamp(0, ViewMode.values.length - 1)];
     });
   }
 
@@ -60,46 +60,20 @@ class _SongListScreenState extends State<SongListScreen> {
   }
 
   void _cycleViewMode() {
-    final next = ViewMode.values[(_viewMode.index + 1) % ViewMode.values.length];
+    final next =
+        ViewMode.values[(_viewMode.index + 1) % ViewMode.values.length];
     setState(() => _viewMode = next);
     _saveViewMode(next);
   }
 
-  String _sortKeyFor(Song s, SortColumn col) {
-    switch (col) {
-      case SortColumn.artist:
-        return s.artist.toLowerCase();
-      case SortColumn.title:
-        return s.title.toLowerCase();
-      case SortColumn.key:
-        return s.keyLabel.toLowerCase();
-    }
-  }
-
-  List<Song> get _sorted {
-    final list = [..._songs];
-    list.sort((a, b) {
-      final cmp = _sortKeyFor(a, _sortBy).compareTo(_sortKeyFor(b, _sortBy));
-      return _asc ? cmp : -cmp;
-    });
-    return list;
-  }
-
-  String _titleCase(String input) {
-    return input.split(RegExp(r'\s+')).map((w) {
-      if (w.isEmpty) return w;
-      return w[0].toUpperCase() + w.substring(1).toLowerCase();
-    }).join(' ');
-  }
-
-  String _capoLabel(String capo) =>
-      capo == 'Sin capo' ? 'Sin capo' : 'Capo $capo';
+  List<Song> get _sorted =>
+      SongFormatting.sorted(_songs, _sortBy, ascending: _asc);
 
   Future<void> _addSong() async {
     SoundService.instance.button();
-    final song = await Navigator.of(context).push<Song>(
-      MaterialPageRoute(builder: (_) => const SongForm()),
-    );
+    final song = await Navigator.of(
+      context,
+    ).push<Song>(MaterialPageRoute(builder: (_) => const SongForm()));
     if (song != null) {
       setState(() => _songs.add(song));
       await _persist();
@@ -108,9 +82,9 @@ class _SongListScreenState extends State<SongListScreen> {
 
   Future<void> _editSong(Song s) async {
     SoundService.instance.button();
-    final updated = await Navigator.of(context).push<Song>(
-      MaterialPageRoute(builder: (_) => SongForm(initial: s)),
-    );
+    final updated = await Navigator.of(
+      context,
+    ).push<Song>(MaterialPageRoute(builder: (_) => SongForm(initial: s)));
     if (updated != null) {
       setState(() {
         final idx = _songs.indexWhere((x) => x.id == updated.id);
@@ -140,11 +114,13 @@ class _SongListScreenState extends State<SongListScreen> {
         content: Text('¿Eliminar "${s.title}" de ${s.artist}?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Eliminar')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar'),
+          ),
         ],
       ),
     );
@@ -163,9 +139,7 @@ class _SongListScreenState extends State<SongListScreen> {
       final zip = await BackupService.instance.exportToZip(_songs);
       await BackupService.instance.shareZip(zip);
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Error al exportar: $e')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Error al exportar: $e')));
     }
   }
 
@@ -189,16 +163,13 @@ class _SongListScreenState extends State<SongListScreen> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Error al importar: $e')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Error al importar: $e')));
     }
   }
 
   Future<void> _showBackupMenu(Offset globalPos) async {
     SoundService.instance.button();
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final selected = await showMenu<String>(
       context: context,
       color: AppColors.bgMid,
@@ -219,8 +190,7 @@ class _SongListScreenState extends State<SongListScreen> {
 
   Future<void> _showRowMenu(Song s, Offset globalPos) async {
     SoundService.instance.button();
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final selected = await showMenu<String>(
       context: context,
       color: AppColors.bgMid,
@@ -285,20 +255,25 @@ class _SongListScreenState extends State<SongListScreen> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Column(
-                children: [
-                  _Header(
-                    onSortTap: _openSortSheet,
-                    onMenuTap: _showBackupMenu,
-                    viewMode: _viewMode,
-                    viewModeIcon: _viewModeIcon(_viewMode),
-                    onViewModeTap: _cycleViewMode,
-                  ),
-                  const SizedBox(height: 24),
-                  Expanded(
-                    child: _loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : sorted.isEmpty
+              // Cap content width so the single column doesn't stretch edge to
+              // edge on tablets / landscape; centered on wide screens.
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: Column(
+                    children: [
+                      _Header(
+                        onSortTap: _openSortSheet,
+                        onMenuTap: _showBackupMenu,
+                        viewMode: _viewMode,
+                        viewModeIcon: _viewModeIcon(_viewMode),
+                        onViewModeTap: _cycleViewMode,
+                      ),
+                      const SizedBox(height: 24),
+                      Expanded(
+                        child: _loading
+                            ? const Center(child: CircularProgressIndicator())
+                            : sorted.isEmpty
                             ? Center(
                                 child: Text(
                                   'No hay canciones.\nToca + para agregar una.',
@@ -310,7 +285,9 @@ class _SongListScreenState extends State<SongListScreen> {
                                 ),
                               )
                             : ListView.separated(
-                                padding: EdgeInsets.only(bottom: 96 + bottomInset),
+                                padding: EdgeInsets.only(
+                                  bottom: 96 + bottomInset,
+                                ),
                                 itemCount: sorted.length,
                                 separatorBuilder: (_, _) {
                                   switch (_viewMode) {
@@ -324,15 +301,22 @@ class _SongListScreenState extends State<SongListScreen> {
                                 },
                                 itemBuilder: (ctx, i) {
                                   final s = sorted[i];
-                                  final glow = AppColors.iconGlowPalette[
-                                      i % AppColors.iconGlowPalette.length];
+                                  final glow =
+                                      AppColors.iconGlowPalette[i %
+                                          AppColors.iconGlowPalette.length];
                                   switch (_viewMode) {
                                     case ViewMode.card:
                                       return _SongCard(
-                                        title: _titleCase(s.title),
-                                        artist: _titleCase(s.artist),
+                                        title: SongFormatting.titleCase(
+                                          s.title,
+                                        ),
+                                        artist: SongFormatting.titleCase(
+                                          s.artist,
+                                        ),
                                         keyLabel: s.keyLabel,
-                                        capoLabel: _capoLabel(s.capo),
+                                        capoLabel: SongFormatting.capoLabel(
+                                          s.capo,
+                                        ),
                                         hasImage: s.imagePath != null,
                                         glowColor: glow,
                                         onTap: () => _openImage(s),
@@ -341,10 +325,16 @@ class _SongListScreenState extends State<SongListScreen> {
                                       );
                                     case ViewMode.compact:
                                       return _CompactSongCard(
-                                        title: _titleCase(s.title),
-                                        artist: _titleCase(s.artist),
+                                        title: SongFormatting.titleCase(
+                                          s.title,
+                                        ),
+                                        artist: SongFormatting.titleCase(
+                                          s.artist,
+                                        ),
                                         keyLabel: s.keyLabel,
-                                        capoLabel: _capoLabel(s.capo),
+                                        capoLabel: SongFormatting.capoLabel(
+                                          s.capo,
+                                        ),
                                         hasImage: s.imagePath != null,
                                         glowColor: glow,
                                         onTap: () => _openImage(s),
@@ -353,10 +343,16 @@ class _SongListScreenState extends State<SongListScreen> {
                                       );
                                     case ViewMode.list:
                                       return _ListSongRow(
-                                        title: _titleCase(s.title),
-                                        artist: _titleCase(s.artist),
+                                        title: SongFormatting.titleCase(
+                                          s.title,
+                                        ),
+                                        artist: SongFormatting.titleCase(
+                                          s.artist,
+                                        ),
                                         keyLabel: s.keyLabel,
-                                        capoLabel: _capoLabel(s.capo),
+                                        capoLabel: SongFormatting.capoLabel(
+                                          s.capo,
+                                        ),
                                         hasImage: s.imagePath != null,
                                         glowColor: glow,
                                         onTap: () => _openImage(s),
@@ -366,8 +362,10 @@ class _SongListScreenState extends State<SongListScreen> {
                                   }
                                 },
                               ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -414,67 +412,11 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         // View-mode toggle button
-        GestureDetector(
-          onTap: onViewModeTap,
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.cardBorder),
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0x1AFFFFFF),
-                  Color(0x10FFFFFF),
-                ],
-              ),
-            ),
-            child: Icon(
-              viewModeIcon,
-              color: AppColors.textSecondary,
-              size: 20,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        // Sort button
-        GestureDetector(
-          onTap: onSortTap,
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: AppColors.cardBorder),
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0x1AFFFFFF),
-                  Color(0x10FFFFFF),
-                ],
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x553E7BFF),
-                  blurRadius: 18,
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: Text(
-              'A–Z',
-              style: GoogleFonts.poppins(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        // Backup / more-vert button
-        Builder(builder: (ctx) {
-          return GestureDetector(
-            onTapDown: (d) => onMenuTap(d.globalPosition),
+        Semantics(
+          button: true,
+          label: 'Cambiar vista',
+          child: GestureDetector(
+            onTap: onViewModeTap,
             child: Container(
               width: 44,
               height: 44,
@@ -482,20 +424,80 @@ class _Header extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.cardBorder),
                 gradient: const LinearGradient(
-                  colors: [
-                    Color(0x1AFFFFFF),
-                    Color(0x10FFFFFF),
-                  ],
+                  colors: [Color(0x1AFFFFFF), Color(0x10FFFFFF)],
                 ),
               ),
-              child: const Icon(
-                Icons.more_vert_rounded,
-                color: AppColors.textPrimary,
-                size: 22,
+              child: Icon(
+                viewModeIcon,
+                color: AppColors.textSecondary,
+                size: 20,
               ),
             ),
-          );
-        }),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Sort button
+        Semantics(
+          button: true,
+          label: 'Ordenar',
+          child: GestureDetector(
+            onTap: onSortTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: AppColors.cardBorder),
+                gradient: const LinearGradient(
+                  colors: [Color(0x1AFFFFFF), Color(0x10FFFFFF)],
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x553E7BFF),
+                    blurRadius: 18,
+                    spreadRadius: -4,
+                  ),
+                ],
+              ),
+              child: Text(
+                'A–Z',
+                style: GoogleFonts.poppins(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Backup / more-vert button
+        Builder(
+          builder: (ctx) {
+            return Semantics(
+              button: true,
+              label: 'Respaldo',
+              child: GestureDetector(
+                onTapDown: (d) => onMenuTap(d.globalPosition),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.cardBorder),
+                    gradient: const LinearGradient(
+                      colors: [Color(0x1AFFFFFF), Color(0x10FFFFFF)],
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.more_vert_rounded,
+                    color: AppColors.textPrimary,
+                    size: 22,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -530,174 +532,131 @@ class _SongCard extends StatefulWidget {
   State<_SongCard> createState() => _SongCardState();
 }
 
-class _SongCardState extends State<_SongCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 120),
-    lowerBound: 0.0,
-    upperBound: 0.04,
-  );
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
+class _SongCardState extends State<_SongCard> {
   @override
   Widget build(BuildContext context) {
-    return RawGestureDetector(
-      gestures: {
-        LongPressGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-          () => LongPressGestureRecognizer(
-            duration: const Duration(seconds: 1),
-          ),
-          (instance) {
-            instance.onLongPressStart =
-                (details) => widget.onLongPress(details.globalPosition);
-          },
-        ),
-      },
-      child: GestureDetector(
-        onTapDown: (_) => _ctrl.forward(),
-        onTapUp: (_) {
-          _ctrl.reverse();
-          widget.onTap();
-        },
-        onTapCancel: () => _ctrl.reverse(),
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, child) => Transform.scale(
-            scale: 1 - _ctrl.value,
-            child: child,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-              child: Stack(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(
-                          color: AppColors.cardBorder, width: 1.2),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0x18FFFFFF),
-                          Color(0x10FFFFFF),
-                        ],
+    return RepaintBoundary(
+      child: PressableScale(
+        onTap: widget.onTap,
+        onLongPressAt: widget.onLongPress,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Stack(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: AppColors.cardBorder, width: 1.2),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0x18FFFFFF), Color(0x10FFFFFF)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.glowColor.withValues(alpha: 0.15),
+                        blurRadius: 24,
+                        spreadRadius: -8,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: widget.glowColor.withValues(alpha: 0.15),
-                          blurRadius: 24,
-                          spreadRadius: -8,
-                        ),
-                        const BoxShadow(
-                          color: Color(0x66000000),
-                          blurRadius: 24,
-                          offset: Offset(0, 14),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 54,
-                          height: 54,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: widget.glowColor
-                                    .withValues(alpha: 0.6),
-                                blurRadius: 28,
-                                spreadRadius: -4,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.music_note_rounded,
-                            color: widget.glowColor,
-                            size: 42,
-                          ),
-                        ),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.title,
-                                style: GoogleFonts.poppins(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 22,
-                                  height: 1.1,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                widget.artist,
-                                style: GoogleFonts.poppins(
-                                  color: AppColors.textSecondary,
-                                  fontWeight: FontWeight.w400,
-                                  fontSize: 14,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 14),
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  _Chip(
-                                    label: widget.keyLabel,
-                                    glowColor: widget.glowColor,
-                                  ),
-                                  _Chip(
-                                    label: widget.capoLabel,
-                                    glowColor: AppColors.neonPink,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      const BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 14),
+                      ),
+                    ],
                   ),
-                  if (widget.hasImage)
-                    Positioned(
-                      top: 12,
-                      right: 12,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 54,
+                        height: 54,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.black.withValues(alpha: 0.35),
-                          border: Border.all(
-                              color: AppColors.cardBorder),
+                          boxShadow: [
+                            BoxShadow(
+                              color: widget.glowColor.withValues(alpha: 0.6),
+                              blurRadius: 28,
+                              spreadRadius: -4,
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          Icons.image_rounded,
-                          size: 16,
-                          color: AppColors.textPrimary,
+                        child: Icon(
+                          Icons.music_note_rounded,
+                          color: widget.glowColor,
+                          size: 42,
                         ),
                       ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.title,
+                              style: GoogleFonts.poppins(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 22,
+                                height: 1.1,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              widget.artist,
+                              style: GoogleFonts.poppins(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w400,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                _Chip(
+                                  label: widget.keyLabel,
+                                  glowColor: widget.glowColor,
+                                ),
+                                _Chip(
+                                  label: widget.capoLabel,
+                                  glowColor: AppColors.neonPink,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.hasImage)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.35),
+                        border: Border.all(color: AppColors.cardBorder),
+                      ),
+                      child: const Icon(
+                        Icons.image_rounded,
+                        size: 16,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -735,165 +694,119 @@ class _CompactSongCard extends StatefulWidget {
   State<_CompactSongCard> createState() => _CompactSongCardState();
 }
 
-class _CompactSongCardState extends State<_CompactSongCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 120),
-    lowerBound: 0.0,
-    upperBound: 0.04,
-  );
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
+class _CompactSongCardState extends State<_CompactSongCard> {
   @override
   Widget build(BuildContext context) {
-    return RawGestureDetector(
-      gestures: {
-        LongPressGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-          () => LongPressGestureRecognizer(
-            duration: const Duration(seconds: 1),
-          ),
-          (instance) {
-            instance.onLongPressStart =
-                (details) => widget.onLongPress(details.globalPosition);
-          },
-        ),
-      },
-      child: GestureDetector(
-        onTapDown: (_) => _ctrl.forward(),
-        onTapUp: (_) {
-          _ctrl.reverse();
-          widget.onTap();
-        },
-        onTapCancel: () => _ctrl.reverse(),
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, child) => Transform.scale(
-            scale: 1 - _ctrl.value,
-            child: child,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Stack(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                          color: AppColors.cardBorder, width: 1.0),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0x16FFFFFF),
-                          Color(0x0DFFFFFF),
-                        ],
+    return RepaintBoundary(
+      child: PressableScale(
+        onTap: widget.onTap,
+        onLongPressAt: widget.onLongPress,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Stack(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.cardBorder, width: 1.0),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0x16FFFFFF), Color(0x0DFFFFFF)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.glowColor.withValues(alpha: 0.12),
+                        blurRadius: 16,
+                        spreadRadius: -6,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: widget.glowColor.withValues(alpha: 0.12),
-                          blurRadius: 16,
-                          spreadRadius: -6,
-                        ),
-                        const BoxShadow(
-                          color: Color(0x55000000),
-                          blurRadius: 16,
-                          offset: Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Music note icon — 38×38, glow blur 18
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: widget.glowColor
-                                    .withValues(alpha: 0.55),
-                                blurRadius: 18,
-                                spreadRadius: -4,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.music_note_rounded,
-                            color: widget.glowColor,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.title,
-                                style: GoogleFonts.poppins(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                  height: 1.2,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              // Artist + key + capo inline
-                              Expanded(
-                                child: Text(
-                                  '${widget.artist}  ·  ${widget.keyLabel}  ·  ${widget.capoLabel}',
-                                  style: GoogleFonts.poppins(
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.w400,
-                                    fontSize: 12,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      const BoxShadow(
+                        color: Color(0x55000000),
+                        blurRadius: 16,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
                   ),
-                  // Image indicator — same position and size as card view
-                  if (widget.hasImage)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(5),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Music note icon — 38×38, glow blur 18
+                      Container(
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.black.withValues(alpha: 0.35),
-                          border: Border.all(
-                              color: AppColors.cardBorder),
+                          boxShadow: [
+                            BoxShadow(
+                              color: widget.glowColor.withValues(alpha: 0.55),
+                              blurRadius: 18,
+                              spreadRadius: -4,
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          Icons.image_rounded,
-                          size: 14,
-                          color: AppColors.textPrimary,
+                        child: Icon(
+                          Icons.music_note_rounded,
+                          color: widget.glowColor,
+                          size: 28,
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.title,
+                              style: GoogleFonts.poppins(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${widget.artist}  ·  ${widget.keyLabel}  ·  ${widget.capoLabel}',
+                              style: GoogleFonts.poppins(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w400,
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Image indicator — same position and size as card view
+                if (widget.hasImage)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.35),
+                        border: Border.all(color: AppColors.cardBorder),
+                      ),
+                      child: const Icon(
+                        Icons.image_rounded,
+                        size: 14,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -931,136 +844,100 @@ class _ListSongRow extends StatefulWidget {
   State<_ListSongRow> createState() => _ListSongRowState();
 }
 
-class _ListSongRowState extends State<_ListSongRow>
-    with SingleTickerProviderStateMixin {
-  // Subtler animation for the dense list — scale down only to 0.98
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 100),
-    lowerBound: 0.0,
-    upperBound: 0.02,
-  );
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
+class _ListSongRowState extends State<_ListSongRow> {
   @override
   Widget build(BuildContext context) {
     final subtitleText =
         '${widget.artist}  ·  ${widget.keyLabel}  ·  ${widget.capoLabel}';
 
-    return RawGestureDetector(
-      gestures: {
-        LongPressGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-          () => LongPressGestureRecognizer(
-            duration: const Duration(seconds: 1),
-          ),
-          (instance) {
-            instance.onLongPressStart =
-                (details) => widget.onLongPress(details.globalPosition);
-          },
-        ),
-      },
-      child: GestureDetector(
-        onTapDown: (_) => _ctrl.forward(),
-        onTapUp: (_) {
-          _ctrl.reverse();
-          widget.onTap();
-        },
-        onTapCancel: () => _ctrl.reverse(),
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, child) => Transform.scale(
-            scale: 1 - _ctrl.value,
-            child: child,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 56),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    children: [
-                      // Leading — 32×32 music note circle with colored glow
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: widget.glowColor.withValues(alpha: 0.5),
-                              blurRadius: 10,
-                              spreadRadius: -3,
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.music_note_rounded,
-                          color: widget.glowColor,
-                          size: 20,
-                        ),
+    // Subtler press feedback for the dense list — scale down only to 0.98.
+    return RepaintBoundary(
+      child: PressableScale(
+        onTap: widget.onTap,
+        onLongPressAt: widget.onLongPress,
+        pressedScale: 0.98,
+        duration: const Duration(milliseconds: 100),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    // Leading — 32×32 music note circle with colored glow
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.glowColor.withValues(alpha: 0.5),
+                            blurRadius: 10,
+                            spreadRadius: -3,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 14),
-                      // Title + subtitle stack
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              widget.title,
-                              style: GoogleFonts.poppins(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                                height: 1.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              subtitleText,
-                              style: GoogleFonts.poppins(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w400,
-                                fontSize: 12,
-                                height: 1.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
+                      child: Icon(
+                        Icons.music_note_rounded,
+                        color: widget.glowColor,
+                        size: 20,
                       ),
-                      // Trailing — image indicator
-                      if (widget.hasImage) ...[
-                        const SizedBox(width: 8),
-                        Icon(
-                          Icons.image_rounded,
-                          size: 16,
-                          color: AppColors.textSecondary,
-                        ),
-                      ],
+                    ),
+                    const SizedBox(width: 14),
+                    // Title + subtitle stack
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: GoogleFonts.poppins(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            subtitleText,
+                            style: GoogleFonts.poppins(
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w400,
+                              fontSize: 12,
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Trailing — image indicator
+                    if (widget.hasImage) ...[
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.image_rounded,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
                     ],
-                  ),
+                  ],
                 ),
               ),
-              // Built-in divider — no separate separator needed
-              const Divider(
-                height: 1,
-                thickness: 1,
-                color: Color(0x22FFFFFF),
-              ),
-            ],
-          ),
+            ),
+            // Built-in divider — no separate separator needed
+            const Divider(height: 1, thickness: 1, color: Color(0x22FFFFFF)),
+          ],
         ),
       ),
     );
@@ -1108,33 +985,30 @@ class _AddButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 74,
-        height: 74,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.neonPurple,
-              AppColors.neonBlue,
+    return Semantics(
+      button: true,
+      label: 'Agregar canción',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 74,
+          height: 74,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.neonPurple, AppColors.neonBlue],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x884E61FF),
+                blurRadius: 30,
+                spreadRadius: -2,
+              ),
             ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x884E61FF),
-              blurRadius: 30,
-              spreadRadius: -2,
-            ),
-          ],
-        ),
-        child: const Icon(
-          Icons.add_rounded,
-          color: Colors.white,
-          size: 40,
+          child: const Icon(Icons.add_rounded, color: Colors.white, size: 40),
         ),
       ),
     );
@@ -1187,16 +1061,12 @@ class _SortBottomSheetState extends State<_SortBottomSheet> {
           margin: const EdgeInsets.only(top: 80),
           padding: EdgeInsets.fromLTRB(20, 14, 20, 32 + bottomPad),
           decoration: BoxDecoration(
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(30)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
             border: Border.all(color: AppColors.cardBorder),
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xEE181A2D),
-                Color(0xEE1D1631),
-              ],
+              colors: [Color(0xEE181A2D), Color(0xEE1D1631)],
             ),
             boxShadow: const [
               BoxShadow(

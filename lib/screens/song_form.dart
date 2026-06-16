@@ -9,14 +9,10 @@ import '../services/sound_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/music_background.dart';
 
-const List<String> kNotes = [
-  'C', 'D', 'E', 'F', 'G', 'A', 'B', 'Desconocida'
-];
+const List<String> kNotes = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Desconocida'];
 const List<String> kAccidentals = ['Ninguno', '#', 'b'];
 const List<String> kModes = ['Mayor', 'Menor'];
-const List<String> kCapos = [
-  'Sin capo', '1', '2', '3', '4', '5', '6'
-];
+const List<String> kCapos = ['Sin capo', '1', '2', '3', '4', '5', '6'];
 
 class SongForm extends StatefulWidget {
   final Song? initial;
@@ -103,28 +99,37 @@ class _SongFormState extends State<SongForm> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_camera_rounded,
-                  color: AppColors.neonCyan),
-              title: Text('Tomar foto',
-                  style:
-                      GoogleFonts.poppins(color: AppColors.textPrimary)),
+              leading: const Icon(
+                Icons.photo_camera_rounded,
+                color: AppColors.neonCyan,
+              ),
+              title: Text(
+                'Tomar foto',
+                style: GoogleFonts.poppins(color: AppColors.textPrimary),
+              ),
               onTap: () => Navigator.pop(ctx, _PickSource.camera),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_rounded,
-                  color: AppColors.neonPink),
-              title: Text('Elegir de galería',
-                  style:
-                      GoogleFonts.poppins(color: AppColors.textPrimary)),
+              leading: const Icon(
+                Icons.photo_library_rounded,
+                color: AppColors.neonPink,
+              ),
+              title: Text(
+                'Elegir de galería',
+                style: GoogleFonts.poppins(color: AppColors.textPrimary),
+              ),
               onTap: () => Navigator.pop(ctx, _PickSource.gallery),
             ),
             if (_imagePath != null)
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded,
-                    color: Colors.redAccent),
-                title: Text('Quitar imagen',
-                    style:
-                        GoogleFonts.poppins(color: AppColors.textPrimary)),
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  'Quitar imagen',
+                  style: GoogleFonts.poppins(color: AppColors.textPrimary),
+                ),
                 onTap: () => Navigator.pop(ctx, _PickSource.remove),
               ),
           ],
@@ -164,24 +169,23 @@ class _SongFormState extends State<SongForm> {
   }
 
   InputDecoration _decoration(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.poppins(color: AppColors.textSecondary),
-        filled: true,
-        fillColor: AppColors.cardFill,
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.cardBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-              color: AppColors.neonPurple, width: 1.5),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.cardBorder),
-        ),
-      );
+    labelText: label,
+    labelStyle: GoogleFonts.poppins(color: AppColors.textSecondary),
+    filled: true,
+    fillColor: AppColors.cardFill,
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: AppColors.cardBorder),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: AppColors.neonPurple, width: 1.5),
+    ),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: AppColors.cardBorder),
+    ),
+  );
 
   Widget _dropdown<T>({
     required String label,
@@ -203,13 +207,12 @@ class _SongFormState extends State<SongForm> {
         style: GoogleFonts.poppins(color: AppColors.textPrimary),
         decoration: _decoration(label),
         items: items
-            .map((e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(
-                    display(e),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ))
+            .map(
+              (e) => DropdownMenuItem(
+                value: e,
+                child: Text(display(e), overflow: TextOverflow.ellipsis),
+              ),
+            )
             .toList(),
         onChanged: enabled
             ? (v) {
@@ -253,66 +256,69 @@ class _SongFormState extends State<SongForm> {
                   TextFormField(
                     controller: _artistCtrl,
                     maxLength: 50,
-                    style:
-                        GoogleFonts.poppins(color: AppColors.textPrimary),
+                    style: GoogleFonts.poppins(color: AppColors.textPrimary),
                     decoration: _decoration('Artista'),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Requerido'
-                        : null,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Requerido' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _titleCtrl,
                     maxLength: 50,
-                    style:
-                        GoogleFonts.poppins(color: AppColors.textPrimary),
+                    style: GoogleFonts.poppins(color: AppColors.textPrimary),
                     decoration: _decoration('Canción'),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Requerido'
-                        : null,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Requerido' : null,
                   ),
                   const SizedBox(height: 8),
-                  Text('Tonalidad',
-                      style: GoogleFonts.poppins(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      )),
+                  Text(
+                    'Tonalidad',
+                    style: GoogleFonts.poppins(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  Builder(builder: (_) {
-                    final unknown = _keyNote == 'Desconocida';
-                    return Row(
-                      children: [
-                        Expanded(
+                  Builder(
+                    builder: (_) {
+                      final unknown = _keyNote == 'Desconocida';
+                      return Row(
+                        children: [
+                          Expanded(
                             child: _dropdown(
-                                label: 'Nota',
-                                value: _keyNote,
-                                items: kNotes,
-                                onChanged: (v) =>
-                                    setState(() => _keyNote = v))),
-                        const SizedBox(width: 8),
-                        Expanded(
+                              label: 'Nota',
+                              value: _keyNote,
+                              items: kNotes,
+                              onChanged: (v) => setState(() => _keyNote = v),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
                             child: _dropdown(
-                                label: '#/b',
-                                value: _keyAccidental,
-                                items: kAccidentals,
-                                enabled: !unknown,
-                                labelBuilder: (v) =>
-                                    v == 'Ninguno' ? '—' : v,
-                                onChanged: (v) => setState(
-                                    () => _keyAccidental = v))),
-                        const SizedBox(width: 8),
-                        Expanded(
+                              label: '#/b',
+                              value: _keyAccidental,
+                              items: kAccidentals,
+                              enabled: !unknown,
+                              labelBuilder: (v) => v == 'Ninguno' ? '—' : v,
+                              onChanged: (v) =>
+                                  setState(() => _keyAccidental = v),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
                             child: _dropdown(
-                                label: 'Modo',
-                                value: _keyMode,
-                                items: kModes,
-                                enabled: !unknown,
-                                onChanged: (v) =>
-                                    setState(() => _keyMode = v))),
-                      ],
-                    );
-                  }),
+                              label: 'Modo',
+                              value: _keyMode,
+                              items: kModes,
+                              enabled: !unknown,
+                              onChanged: (v) => setState(() => _keyMode = v),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   const SizedBox(height: 20),
                   _dropdown(
                     label: 'Capotrasto',
@@ -370,14 +376,22 @@ class _ImagePickerField extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (hasImage)
-              Image.file(File(previewPath!), fit: BoxFit.cover)
+              Image.file(
+                File(previewPath!),
+                fit: BoxFit.cover,
+                // Decode no larger than needed for this ~180px-tall preview;
+                // avoids holding a full-resolution bitmap in memory.
+                cacheWidth: 720,
+              )
             else
               Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.add_photo_alternate_rounded,
-                        color: AppColors.neonPurple),
+                    const Icon(
+                      Icons.add_photo_alternate_rounded,
+                      color: AppColors.neonPurple,
+                    ),
                     const SizedBox(width: 10),
                     Text(
                       'Agregar imagen',
@@ -395,7 +409,9 @@ class _ImagePickerField extends StatelessWidget {
                 bottom: 8,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.55),
                     borderRadius: BorderRadius.circular(14),
@@ -403,13 +419,18 @@ class _ImagePickerField extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.edit_rounded,
-                          size: 16, color: Colors.white),
+                      const Icon(
+                        Icons.edit_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'Cambiar',
                         style: GoogleFonts.poppins(
-                            color: Colors.white, fontSize: 13),
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -435,36 +456,37 @@ class _SubmitButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 56,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.neonPurple,
-              AppColors.neonBlue,
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 56,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.neonPurple, AppColors.neonBlue],
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x884E61FF),
+                blurRadius: 24,
+                spreadRadius: -4,
+              ),
             ],
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x884E61FF),
-              blurRadius: 24,
-              spreadRadius: -4,
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+              letterSpacing: 0.3,
             ),
-          ],
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.poppins(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-            letterSpacing: 0.3,
           ),
         ),
       ),

@@ -29,20 +29,21 @@ class Song {
     if (note == 'Desconocida') return 'Desconocida';
     final acc = accidental == 'Ninguno' ? '' : accidental;
     final m = mode == 'Menor' ? 'm' : '';
-    return '$note$m$acc';
+    // Accidental before the minor 'm': "A#m", not "Am#".
+    return '$note$acc$m';
   }
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'artist': artist,
-        'title': title,
-        'keyNote': keyNote,
-        'keyAccidental': keyAccidental,
-        'keyMode': keyMode,
-        'capo': capo,
-        'imagePath': imagePath,
-        'thumbPath': thumbPath,
-      };
+    'id': id,
+    'artist': artist,
+    'title': title,
+    'keyNote': keyNote,
+    'keyAccidental': keyAccidental,
+    'keyMode': keyMode,
+    'capo': capo,
+    'imagePath': imagePath,
+    'thumbPath': thumbPath,
+  };
 
   static const Map<String, String> _noteMigration = {
     'Do': 'C',
@@ -57,16 +58,16 @@ class Song {
   static String _migrateNote(String n) => _noteMigration[n] ?? n;
 
   factory Song.fromMap(Map<String, dynamic> map) => Song(
-        id: map['id'] as String,
-        artist: map['artist'] as String,
-        title: map['title'] as String,
-        keyNote: _migrateNote(map['keyNote'] as String),
-        keyAccidental: map['keyAccidental'] as String,
-        keyMode: map['keyMode'] as String,
-        capo: map['capo'] as String,
-        imagePath: map['imagePath'] as String?,
-        thumbPath: map['thumbPath'] as String?,
-      );
+    id: map['id'] as String,
+    artist: map['artist'] as String,
+    title: map['title'] as String,
+    keyNote: _migrateNote(map['keyNote'] as String),
+    keyAccidental: map['keyAccidental'] as String,
+    keyMode: map['keyMode'] as String,
+    capo: map['capo'] as String,
+    imagePath: map['imagePath'] as String?,
+    thumbPath: map['thumbPath'] as String?,
+  );
 
   String toJson() => jsonEncode(toMap());
   factory Song.fromJson(String source) =>

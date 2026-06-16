@@ -35,13 +35,11 @@ class BackupService {
       map['thumbPath'] = _basename(s.thumbPath);
       exportSongs.add(map);
     }
-    final manifest = jsonEncode({
-      'version': 1,
-      'songs': exportSongs,
-    });
+    final manifest = jsonEncode({'version': 1, 'songs': exportSongs});
     final manifestBytes = utf8.encode(manifest);
     archive.addFile(
-        ArchiveFile(_manifestName, manifestBytes.length, manifestBytes));
+      ArchiveFile(_manifestName, manifestBytes.length, manifestBytes),
+    );
 
     if (imagesDir.existsSync()) {
       final referenced = <String>{};
@@ -57,7 +55,8 @@ class BackupService {
         if (!referenced.contains(name)) continue;
         final bytes = await entity.readAsBytes();
         archive.addFile(
-            ArchiveFile('$_imagesDirName/$name', bytes.length, bytes));
+          ArchiveFile('$_imagesDirName/$name', bytes.length, bytes),
+        );
       }
     }
 
@@ -71,10 +70,7 @@ class BackupService {
 
   Future<void> shareZip(File zip) async {
     await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(zip.path)],
-        text: 'Repertorio de RepertApp',
-      ),
+      ShareParams(files: [XFile(zip.path)], text: 'Repertorio de RepertApp'),
     );
   }
 
@@ -107,6 +103,16 @@ class BackupService {
     final manifestJson =
         jsonDecode(utf8.decode(manifestFile.content as List<int>))
             as Map<String, dynamic>;
+
+    // Reject backups newer than we know how to read. A missing version is
+    // treated as the original (v1) format.
+    final version = manifestJson['version'] as int? ?? 1;
+    if (version > 1) {
+      throw FormatException(
+        'Versión de respaldo no soportada ($version). Actualiza la app.',
+      );
+    }
+
     final rawSongs = (manifestJson['songs'] as List).cast<Map>();
 
     final imagesDir = await ImageService.instance.imagesDir();
@@ -125,21 +131,27 @@ class BackupService {
       final map = raw.cast<String, dynamic>();
       final imgName = map['imagePath'] as String?;
       final thmName = map['thumbPath'] as String?;
-      map['imagePath'] =
-          imgName != null ? '${imagesDir.path}/$imgName' : null;
-      map['thumbPath'] =
-          thmName != null ? '${imagesDir.path}/$thmName' : null;
+      map['imagePath'] = imgName != null ? '${imagesDir.path}/$imgName' : null;
+      map['thumbPath'] = thmName != null ? '${imagesDir.path}/$thmName' : null;
       final song = Song.fromMap(map);
-      if (merged.containsKey(song.id)) replaced++;
+      final old = merged[song.id];
+      if (old != null) {
+        replaced++;
+        // The replaced song may have pointed at different image files; delete
+        // them so they don't linger as orphans on disk.
+        if (old.imagePath != song.imagePath) {
+          await ImageService.instance.deleteIfExists(old.imagePath);
+        }
+        if (old.thumbPath != song.thumbPath) {
+          await ImageService.instance.deleteIfExists(old.thumbPath);
+        }
+      }
       merged[song.id] = song;
     }
 
     final list = merged.values.toList();
     await storage.saveAll(list);
-    return ImportResult(
-      imported: rawSongs.length,
-      replaced: replaced,
-    );
+    return ImportResult(imported: rawSongs.length, replaced: replaced);
   }
 
   String? _basename(String? path) {
